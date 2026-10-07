@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Box Up 關卡編輯器</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .palette { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+  .palette button { flex-direction: column; justify-content: center; padding: 4px; font-size: 12px; min-height: 64px; }
+  .palette button.on { outline: 2px solid var(--accent); outline-offset: 1px; background: var(--panel); }
+  .palette svg { width: 36px; height: 36px; }
+  svg.board .cell { cursor: crosshair; }
+  svg.board .target-mark { pointer-events: none; }
+  .msg { font-size: 14px; min-height: 1.4em; }
+  .msg.err { color: var(--danger); }
+  .msg.ok { color: var(--ok); }
+  input[type=number] { width: 70px; }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>Box Up <small>關卡編輯器</small></h1>
+  <nav><a class="btn" href="index.html">▶ 回到遊戲</a></nav>
+</header>
+
+<main class="layout">
+  <section class="stack">
+    <div class="card board-wrap">
+      <div class="row" style="justify-content:center">
+        <label>寬 <input type="number" id="wIn" min="2" max="15" value="5"></label>
+        <label>高 <input type="number" id="hIn" min="2" max="15" value="5"></label>
+        <button id="resizeBtn">調整大小</button>
+        <button id="clearBtn" class="danger">清空</button>
+      </div>
+      <svg class="board" id="board"></svg>
+      <div class="msg" id="msg"></div>
+      <p class="muted" style="margin:0;text-align:center">左鍵：放置目前工具（可拖曳連續畫）· 右鍵：旋轉箱子開口 · 有星號 ★ 的紅箱／藍箱就是目標箱</p>
+    </div>
+
+    <div class="card">
+      <h2>關卡代碼</h2>
+      <textarea id="codeBox" rows="2" spellcheck="false"></textarea>
+      <div class="row" style="margin-top:8px">
+        <button id="loadCodeBtn">由代碼載入</button>
+        <button id="copyCodeBtn">複製代碼</button>
+        <span class="muted">格式與原版相容，例：330121---;nMW;---</span>
+      </div>
+    </div>
+  </section>
+
+  <aside class="stack">
+    <div class="card">
+      <h2>工具</h2>
+      <div class="palette" id="palette"></div>
+    </div>
+
+    <div class="card">
+      <h2>檢查與存檔</h2>
+      <input type="text" id="nameIn" placeholder="關卡名稱">
+      <div class="row" style="margin-top:8px">
+        <button id="solveBtn">🔍 驗證可解</button>
+        <button id="playBtn">🧪 試玩</button>
+        <button id="saveBtn" class="primary">💾 存為自訂關卡</button>
+      </div>
+      <div class="msg" id="solveMsg" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <h2>我的自訂關卡</h2>
+      <div class="list" id="customList"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="small" id="exportBtn">⤓ 匯出 (JSON)</button>
+        <button class="small" id="importBtn">⤒ 匯入</button>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>以內建關卡為範本</h2>
+      <div class="row">
+        <select id="tplSel" style="flex:1"></select>
+        <button id="tplBtn">載入</button>
+      </div>
+    </div>
+  </aside>
+</main>
+<div class="toast" id="toast"></div>
+
+<script src="boxup-core.js"></script>
+<script src="levels.js"></script>
+<script>
+(function () {
+  'use strict';
+  const B = BoxUp;
+  const $ = id => document.getElementById(id);
+  const K_CUSTOM = 'boxup.customLevels';
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { toast('無法寫入瀏覽器儲存空間'); } },
+  };
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1800);
+  }
+
+  // grid[y][x]: '-', 'X', 'M', 'n','e','s','w','N','E','S','W'
+  let grid = [];
+  let red = null, blue = null;   // 目標箱座標 {x,y}
+  let tool = 'X';
+  let editingIndex = -1;         // 正在編輯的自訂關卡索引
+
+  const TOOLS = [
+    { id: 'X', label: '牆' }, { id: '-', label: '橡皮擦' }, { id: 'M', label: '玩家' }, { id: '*', label: '設為目標' },
+    { id: 'n', label: '紅·開上' }, { id: 'e', label: '紅·開右' }, { id: 's', label: '紅·開下' }, { id: 'w', label: '紅·開左' },
+    { id: 'N', label: '藍·開上' }, { id: 'E', label: '藍·開右' }, { id: 'S', label: '藍·開下' }, { id: 'W', label: '藍·開左' },
+  ];
+
+  function iconFor(id) {
+    const svg = B.svgEl('svg', { viewBox: '-4 -4 108 108' });
+    B.svgEl('rect', { x: 0, y: 0, width: 100, height: 100, fill: 'var(--cell)', stroke: 'var(--grid)', 'stroke-width': 3 }, svg);
+    if (id === 'X') B.svgEl('rect', { x: 0, y: 0, width: 100, height: 100, fill: 'var(--wall)' }, svg);
+    else if (id === 'M') B.svgEl('rect', { x: 37.5, y: 37.5, width: 25, height: 25, fill: 'var(--player)' }, svg);
+    else if (id === '*') starAt(svg, 50, 50, 1.6);
+    else if (B.BOX_CHARS[id]) { const [k, d] = B.BOX_CHARS[id]; B.boxShape(k, d, true, svg); }
+    return svg;
+  }
+
+  function starAt(parent, cx, cy, s) {
+    const t = B.svgEl('text', { x: cx, y: cy, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+      'font-size': 18 * s, fill: '#f5b400', stroke: '#7a5a00', 'stroke-width': 1, class: 'target-mark' }, parent);
+    t.textContent = '★';
+    return t;
+  }
+
+  function buildPalette() {
+    const p = $('palette');
+    TOOLS.forEach(t => {
+      const b = document.createElement('button');
+      b.dataset.tool = t.id; b.title = t.label;
+      b.appendChild(iconFor(t.id));
+      b.appendChild(document.createTextNode(t.label));
+      b.addEventListener('click', () => { tool = t.id; refreshPalette(); });
+      p.appendChild(b);
+    });
+    refreshPalette();
+  }
+  function refreshPalette() { document.querySelectorAll('.palette button').forEach(b => b.classList.toggle('on', b.dataset.tool === tool)); }
+
+  // ---------- 格子操作 ----------
+  function newGrid(w, h) {
+    grid = Array.from({ length: h }, () => Array(w).fill('-'));
+    red = blue = null;
+  }
+
+  function resize(w, h) {
+    const old = grid;
+    grid = Array.from({ length: h }, (_, y) => Array.from({ length: w }, (_, x) => (old[y] && old[y][x]) || '-'));
+    if (red && (red.x >= w || red.y >= h)) red = null;
+    if (blue && (blue.x >= w || blue.y >= h)) blue = null;
+    fixTargets();
+  }
+
+  const isRed = c => 'nesw'.includes(c) && c !== '';
+  const isBlue = c => 'NESW'.includes(c) && c !== '';
+
+  // 目標箱若已不存在，自動改指第一個同色箱
+  function fixTargets() {
+    const find = test => { for (let y = 0; y < grid.length; y++) for (let x = 0; x < grid[0].length; x++) if (test(grid[y][x])) return { x, y }; return null; };
+    if (!red || !isRed(grid[red.y][red.x])) red = find(isRed);
+    if (!blue || !isBlue(grid[blue.y][blue.x])) blue = find(isBlue);
+  }
+
+  function paint(x, y, t) {
+    const c = grid[y][x];
+    if (t === '*') {
+      if (isRed(c)) red = { x, y };
+      else if (isBlue(c)) blue = { x, y };
+      else { setMsg('「設為目標」要點在紅箱或藍箱上', true); return; }
+    } else if (t === 'M') {
+      for (const row of grid) for (let i = 0; i < row.length; i++) if (row[i] === 'M') row[i] = '-';
+      grid[y][x] = 'M';
+    } else {
+      grid[y][x] = t;
+      if (isRed(t) && !red) red = { x, y };
+      if (isBlue(t) && !blue) blue = { x, y };
+    }
+    fixTargets();
+    changed();
+  }
+
+  function rotate(x, y) {
+    const c = grid[y][x];
+    const k = B.BOX_CHARS[c];
+    if (!k) return;
+    const nc = 'nesw'[(k[1] + 1) % 4];
+    grid[y][x] = k[0] === B.BLUE ? nc.toUpperCase() : nc;
+    changed();
+  }
+
+  // ---------- 繪製 ----------
+  function draw() {
+    const svg = $('board');
+    const h = grid.length, w = grid[0].length, C = B.CELL;
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+    svg.setAttribute('viewBox', `-6 -6 ${w * C + 12} ${h * C + 12}`);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const c = grid[y][x];
+      const g = B.svgEl('g', { transform: `translate(${x * C} ${y * C})` }, svg);
+      const r = B.svgEl('rect', { x: 0, y: 0, width: C, height: C, class: 'cell' + (c === 'X' ? ' wall' : '') }, g);
+      r.dataset.x = x; r.dataset.y = y;
+      if (c === 'M') B.svgEl('rect', { x: 37.5, y: 37.5, width: 25, height: 25, fill: 'var(--player)', 'pointer-events': 'none' }, g);
+      else if (B.BOX_CHARS[c]) {
+        const [k, d] = B.BOX_CHARS[c];
+        const tgt = (k === B.RED && red && red.x === x && red.y === y) || (k === B.BLUE && blue && blue.x === x && blue.y === y);
+        B.boxShape(k, d, tgt, g).setAttribute('pointer-events', 'none');
+        if (tgt) starAt(g, k === B.RED ? 50 : 82, k === B.RED ? 50 : 18, 1);
+      }
+    }
+  }
+
+  function currentCode() {
+    if (!red || !blue) return null;
+    return B.serializeGrid(grid, red, blue);
+  }
+
+  function validate() {
+    const code = currentCode();
+    let players = 0; grid.forEach(r => r.forEach(c => { if (c === 'M') players++; }));
+    if (!players) return { err: '請放置玩家（小黑點）' };
+    if (!red) return { err: '請放置至少一個紅箱' };
+    if (!blue) return { err: '請放置至少一個藍箱' };
+    try { return { code, level: B.parse(code) }; } catch (e) { return { err: e.message }; }
+  }
+
+  function setMsg(t, err) { const m = $('msg'); m.textContent = t; m.className = 'msg' + (err ? ' err' : ''); }
+
+  function changed() {
+    draw();
+    const v = validate();
+    $('codeBox').value = v.code || currentCode() || '';
+    setMsg(v.err ? '⚠ ' + v.err : '關卡格式正確', !!v.err);
+    $('solveMsg').textContent = '';
+  }
+
+  // ---------- 滑鼠 ----------
+  let dragging = false, lastCell = null;
+  const cellFromEvent = e => {
+    const t = document.elementFromPoint(e.clientX, e.clientY);
+    return t && t.dataset && t.dataset.x !== undefined ? [+t.dataset.x, +t.dataset.y] : null;
+  };
+  $('board').addEventListener('pointerdown', e => {
+    const c = cellFromEvent(e); if (!c) return;
+    if (e.button === 2) { rotate(c[0], c[1]); return; }
+    if (e.button !== 0) return;
+    dragging = ['X', '-'].includes(tool);
+    lastCell = c.join();
+    paint(c[0], c[1], tool);
+  });
+  $('board').addEventListener('pointermove', e => {
+    if (!dragging) return;
+    const c = cellFromEvent(e); if (!c || c.join() === lastCell) return;
+    lastCell = c.join(); paint(c[0], c[1], tool);
+  });
+  window.addEventListener('pointerup', () => { dragging = false; });
+  $('board').addEventListener('contextmenu', e => e.preventDefault());
+
+  // ---------- 載入 ----------
+  function loadCode(code, name) {
+    const L = B.parse(code);
+    grid = B.levelToGrid(L);
+    red = { x: L.boxes[L.redTarget].x, y: L.boxes[L.redTarget].y };
+    blue = { x: L.boxes[L.blueTarget].x, y: L.boxes[L.blueTarget].y };
+    $('wIn').value = L.w; $('hIn').value = L.h;
+    if (name !== undefined) $('nameIn').value = name;
+    changed();
+  }
+
+  // ---------- 自訂關卡 ----------
+  function customs() { return store.get(K_CUSTOM, []); }
+
+  function renderCustoms() {
+    const list = customs(), box = $('customList');
+    if (!list.length) { box.innerHTML = '<div class="empty">尚無自訂關卡。自訂關卡會出現在遊戲頁的關卡選單「自訂關卡」分類中。</div>'; return; }
+    box.innerHTML = '';
+    list.forEach((c, i) => {
+      const d = document.createElement('div'); d.className = 'item';
+      d.innerHTML = `<div class="t"></div><div class="muted cd" style="font-family:ui-monospace,Consolas,monospace;word-break:break-all"></div>
+        <div class="row"><button class="small" data-a="edit">編輯</button><button class="small" data-a="play">▶ 玩</button><button class="small danger" data-a="del">刪除</button></div>`;
+      d.querySelector('.t').textContent = c.name + (c.par ? `（最短 ${c.par} 步）` : '') + (i === editingIndex ? ' ✎' : '');
+      d.querySelector('.cd').textContent = c.code;
+      d.addEventListener('click', e => {
+        const a = e.target.dataset && e.target.dataset.a;
+        if (a === 'edit') { editingIndex = i; loadCode(c.code, c.name); renderCustoms(); }
+        else if (a === 'play') location.href = 'index.html?code=' + encodeURIComponent(c.code) + '&name=' + encodeURIComponent(c.name);
+        else if (a === 'del' && confirm(`刪除自訂關卡「${c.name}」？`)) {
+          const l = customs(); l.splice(i, 1); store.set(K_CUSTOM, l);
+          if (editingIndex === i) editingIndex = -1; else if (editingIndex > i) editingIndex--;
+          renderCustoms();
+        }
+      });
+      box.appendChild(d);
+    });
+  }
+
+  function solveNow() {
+    const v = validate(), m = $('solveMsg');
+    if (v.err) { m.textContent = '⚠ ' + v.err; m.className = 'msg err'; return null; }
+    m.textContent = '計算中…'; m.className = 'msg';
+    return new Promise(res => setTimeout(() => {
+      const r = B.solve(v.level);
+      if (r.path) {
+        m.textContent = `✔ 可解！最短 ${r.path.length} 步（搜尋 ${r.nodes.toLocaleString()} 個狀態）\n${B.movesToArrows(r.path.map(d => B.LETTERS[d]).join(''))}`;
+        m.className = 'msg ok'; m.style.whiteSpace = 'pre-wrap'; m.style.wordBreak = 'break-all';
+      } else {
+        m.textContent = r.aborted ? '⚠ 狀態太多，無法在合理時間內判斷是否可解' : '✘ 此關卡無解';
+        m.className = 'msg err';
+      }
+      res({ v, r });
+    }, 20));
+  }
+
+  $('solveBtn').addEventListener('click', solveNow);
+  $('playBtn').addEventListener('click', () => {
+    const v = validate(); if (v.err) { toast(v.err); return; }
+    window.open('index.html?code=' + encodeURIComponent(v.code) + '&name=' + encodeURIComponent($('nameIn').value.trim() || '試玩關卡'), '_blank');
+  });
+  $('saveBtn').addEventListener('click', async () => {
+    const res = await solveNow(); if (!res) return;
+    const { v, r } = res;
+    if (!r.path && !confirm('此關卡無解（或無法判斷），仍要存檔嗎？')) return;
+    const name = $('nameIn').value.trim() || `自訂關卡 ${new Date().toLocaleDateString()}`;
+    const list = customs();
+    const entry = { name, code: v.code, par: r.path ? r.path.length : null, savedAt: new Date().toISOString() };
+    const dup = list.findIndex((c, i) => c.code === v.code && i !== editingIndex);
+    if (dup >= 0) { toast('已有相同的關卡：' + list[dup].name); return; }
+    if (editingIndex >= 0 && list[editingIndex] && confirm(`覆蓋原本的「${list[editingIndex].name}」？（取消則另存新關卡）`)) list[editingIndex] = entry;
+    else { list.push(entry); editingIndex = list.length - 1; }
+    store.set(K_CUSTOM, list);
+    $('nameIn').value = name;
+    renderCustoms();
+    toast('已儲存：' + name);
+  });
+
+  $('resizeBtn').addEventListener('click', () => {
+    const w = Math.max(2, Math.min(15, +$('wIn').value || 5)), h = Math.max(2, Math.min(15, +$('hIn').value || 5));
+    $('wIn').value = w; $('hIn').value = h; resize(w, h); changed();
+  });
+  $('clearBtn').addEventListener('click', () => {
+    if (!confirm('清空整個棋盤？')) return;
+    newGrid(grid[0].length, grid.length); editingIndex = -1; renderCustoms(); changed();
+  });
+  $('loadCodeBtn').addEventListener('click', () => {
+    try { loadCode($('codeBox').value); editingIndex = -1; renderCustoms(); toast('已載入'); }
+    catch (e) { setMsg('⚠ 代碼錯誤：' + e.message, true); }
+  });
+  $('copyCodeBtn').addEventListener('click', () => {
+    navigator.clipboard.writeText($('codeBox').value).then(() => toast('已複製'), () => toast('複製失敗'));
+  });
+
+  const tpl = $('tplSel');
+  BOXUP_LEVELS.forEach((l, i) => { const o = document.createElement('option'); o.value = i; o.textContent = `${i + 1}. ${l.name}`; tpl.appendChild(o); });
+  $('tplBtn').addEventListener('click', () => {
+    const l = BOXUP_LEVELS[+tpl.value]; editingIndex = -1;
+    loadCode(l.code, l.name + '（改）'); renderCustoms();
+  });
+
+  $('exportBtn').addEventListener('click', () => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify({ app: 'BoxUp', version: 1, customLevels: customs() }, null, 2)], { type: 'application/json' }));
+    a.download = 'BoxUp-自訂關卡.json'; a.click();
+  });
+  $('importBtn').addEventListener('click', () => $('importFile').click());
+  $('importFile').addEventListener('change', e => {
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      try {
+        const data = JSON.parse(rd.result);
+        const inc = Array.isArray(data) ? data : (data.customLevels || []);
+        const list = customs(), codes = new Set(list.map(c => c.code));
+        let n = 0;
+        inc.forEach(c => { if (c && c.code && !codes.has(c.code)) { try { B.parse(c.code); list.push({ name: c.name || '匯入關卡', code: c.code, par: c.par ?? null }); n++; } catch (_) {} } });
+        store.set(K_CUSTOM, list); renderCustoms(); toast(`匯入 ${n} 個關卡`);
+      } catch (err) { toast('匯入失敗：檔案格式錯誤'); }
+    };
+    rd.readAsText(f);
+  });
+
+  // ---------- 啟動 ----------
+  buildPalette();
+  newGrid(5, 5);
+  changed();
+  renderCustoms();
+})();
+</script>
+</body>
+</html>

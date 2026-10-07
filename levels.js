@@ -1,0 +1,20 @@
+/* 內建 17 關（關卡設計來源：clickmazes.com Box Up / mansoft.nl SVG 版） */
+window.BOXUP_LEVELS = [
+  { name: '3x3 No.1', code: '330121---;nMW;---' },
+  { name: '3x3 No.2', code: '332101---;NMw;---' },
+  { name: '3x3 No.3', code: '330211M-W;-N-;n--' },
+  { name: '3x3 No.4', code: '330121-S-;eMS;-N-' },
+  { name: '4x4 No.1', code: '442130--MS;-Xe-;-wX-;N---' },
+  { name: '4x4 No.2', code: '441102-S-M;-wnW;Sne-;--N-' },
+  { name: '4x4 No.3', code: '441301--M-;En-W;E-nW;En-W' },
+  { name: '4x4 No.4', code: '440220-WS-;SMwn;enNW;-Nn-' },
+  { name: '5x5 No.1', code: '550033s-E-X;-X---;---X-;--XE-;MX--W' },
+  { name: '5x5 No.2', code: '551202-----;EnX-X;Nw---;MXSXN;-----' },
+  { name: '5x5 No.3', code: '554043----s;EnNn-;-XXXM;-sSsW;n----' },
+  { name: '5x5 No.4', code: '554134---s-;-Xn-n;E--X-;-WX-S;E--NM' },
+  { name: '4x2 (47 moves)', code: '422120--E-;-nnM' },
+  { name: '5x2 (68 moves)', code: '524111---S-;-NWMn' },
+  { name: '6x2 (82 moves)', code: '623121-Mw---;--NwN-' },
+  { name: '6x2 (97 moves)', code: '622051--eE--;Ne--MN' },
+  { name: '6x2 (108 moves)', code: '622131e---M-;N-eN--' },
+];

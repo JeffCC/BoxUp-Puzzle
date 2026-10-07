@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Box Up 箱中箱</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1>Box Up <small>箱中箱</small></h1>
+  <div class="row">
+    <button id="prevBtn" title="上一關">◀</button>
+    <select id="levelSel" aria-label="選擇關卡"></select>
+    <button id="nextBtn" title="下一關">▶</button>
+  </div>
+  <nav><a class="btn" href="editor.html">✎ 關卡編輯器</a></nav>
+</header>
+
+<main class="layout">
+  <section class="stack">
+    <div class="card board-wrap">
+      <div class="status" id="status"></div>
+      <svg class="board" id="board"></svg>
+      <div class="row" style="justify-content:center">
+        <button id="undoBtn">↶ 復原 (Z)</button>
+        <button id="restartBtn">⟲ 重新開始 (R)</button>
+        <button id="hintBtn">💡 提示一步 (H)</button>
+        <button id="solutionBtn">▶ 播放最短解</button>
+      </div>
+      <div class="dpad" aria-label="方向鍵">
+        <button class="u" data-dir="0">↑</button>
+        <button class="l" data-dir="3">←</button>
+        <button class="d" data-dir="2">↓</button>
+        <button class="r" data-dir="1">→</button>
+      </div>
+    </div>
+
+    <div class="card rules">
+      <details>
+        <summary>遊戲規則</summary>
+        <ul>
+          <li>用方向鍵（或 WASD、畫面按鈕、點擊相鄰格、手機滑動）移動<b>小黑點</b>。</li>
+          <li>箱子是缺一邊的方框，<b>缺口</b>就是入口。只能從缺口走進箱子。</li>
+          <li>在箱子裡往缺口方向走會離開箱子；往其他方向走會<b>推著箱子一起移動</b>。</li>
+          <li>紅箱可以從藍箱的缺口推進藍箱；藍箱則放不進紅箱，箱子也不能撞進同色箱子。</li>
+          <li>目標：小黑點進入<span style="color:var(--box-red)">紅箱</span>，再把紅箱推進<span style="color:var(--box-blue)">藍箱</span>。黑色的箱子只是障礙用的配角。</li>
+        </ul>
+        <p class="muted">鍵盤：方向鍵 / WASD 移動、Z 或 Backspace 復原、R 重新開始、H 提示。</p>
+      </details>
+    </div>
+  </section>
+
+  <aside class="stack">
+    <div class="card">
+      <div class="stats">
+        <div><b id="stepCount">0</b><span>步數</span></div>
+        <div><b id="bestCount">–</b><span>個人最佳</span></div>
+        <div><b id="parCount">…</b><span>最短解</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <h2 style="margin:0">移動紀錄</h2>
+        <button class="small" id="copyMovesBtn">複製</button>
+      </div>
+      <div class="movelog" id="moveLog" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <h2>存檔</h2>
+      <div class="row">
+        <input type="text" id="saveName" placeholder="存檔名稱（可留空）" style="flex:1">
+        <button class="primary" id="saveBtn">💾 存檔</button>
+      </div>
+      <div class="list" id="recordList" style="margin-top:10px"></div>
+      <div class="row" style="margin-top:10px">
+        <button class="small" id="exportBtn">⤓ 匯出全部 (JSON)</button>
+        <button class="small" id="importBtn">⤒ 匯入</button>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
+      </div>
+    </div>
+
+    <p class="muted">關卡設計來源：<a href="https://clickmazes.com/boxup/new-boxup.htm" target="_blank" rel="noopener">clickmazes.com Box Up</a>，
+      內建 17 關依 <a href="https://www.mansoft.nl/svg/boxup.html" target="_blank" rel="noopener">mansoft.nl</a> 版重現。</p>
+  </aside>
+</main>
+<div class="toast" id="toast"></div>
+
+<script src="boxup-core.js"></script>
+<script src="levels.js"></script>
+<script>
+(function () {
+  'use strict';
+  const B = BoxUp;
+  const $ = id => document.getElementById(id);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { toast('無法寫入瀏覽器儲存空間'); } },
+  };
+  const K_RECORDS = 'boxup.records', K_CUSTOM = 'boxup.customLevels', K_BEST = 'boxup.best', K_LAST = 'boxup.lastLevel';
+
+  let levels = [];        // {id, name, code, custom}
+  let cur = null;         // 目前關卡 {id,name,code}
+  let L = null;           // 解析後關卡
+  let history = [];       // 狀態堆疊
+  let moves = '';         // 'URDL' 字串
+  let board = null;
+  let solved = false;
+  let replayTimer = null;
+  let parCache = {};
+
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1800);
+  }
+
+  // ---------- 關卡清單 ----------
+  function buildLevelList() {
+    levels = BOXUP_LEVELS.map((l, i) => ({ id: 'b' + i, name: `${i + 1}. ${l.name}`, code: l.code }));
+    store.get(K_CUSTOM, []).forEach((l, i) => levels.push({ id: 'c:' + l.code, name: `★ ${l.name}`, code: l.code, custom: true }));
+    const params = new URLSearchParams(location.search);
+    const testCode = params.get('code');
+    if (testCode && !levels.some(l => l.code === testCode)) {
+      levels.push({ id: 't:' + testCode, name: `🧪 ${params.get('name') || '試玩關卡'}`, code: testCode, custom: true });
+    }
+    const sel = $('levelSel');
+    sel.innerHTML = '';
+    const g1 = document.createElement('optgroup'); g1.label = '內建關卡';
+    const g2 = document.createElement('optgroup'); g2.label = '自訂關卡';
+    levels.forEach((l, i) => {
+      const o = document.createElement('option'); o.value = i; o.textContent = l.name;
+      (l.custom ? g2 : g1).appendChild(o);
+    });
+    sel.appendChild(g1); if (g2.children.length) sel.appendChild(g2);
+  }
+
+  function levelIndexByCode(code) { return levels.findIndex(l => l.code === code); }
+
+  function loadLevel(idx, movesToApply) {
+    stopReplay();
+    idx = Math.max(0, Math.min(levels.length - 1, idx));
+    cur = levels[idx];
+    $('levelSel').value = idx;
+    $('prevBtn').disabled = idx === 0;
+    $('nextBtn').disabled = idx === levels.length - 1;
+    try { L = B.parse(cur.code); }
+    catch (e) { $('status').textContent = '關卡格式錯誤：' + e.message; return; }
+    board = B.createBoard($('board'), L, { onCell: clickCell });
+    history = [B.initialState(L)];
+    moves = '';
+    solved = false;
+    $('board').classList.add('no-anim');
+    render();
+    requestAnimationFrame(() => requestAnimationFrame(() => $('board').classList.remove('no-anim')));
+    document.title = 'Box Up ' + cur.name.replace(/^[^ ]+ /, '');
+    store.set(K_LAST, cur.code);
+    if (movesToApply) applyMoves(movesToApply, false);
+    updatePar();
+  }
+
+  function updatePar() {
+    const code = cur.code;
+    if (parCache[code] !== undefined) { $('parCount').textContent = parCache[code] ?? '無解'; return; }
+    $('parCount').textContent = '…';
+    setTimeout(() => {
+      const r = B.solve(B.parse(code));
+      parCache[code] = r.path ? r.path.length : null;
+      if (cur.code === code) $('parCount').textContent = parCache[code] ?? (r.aborted ? '太大' : '無解');
+    }, 30);
+  }
+
+  function state() { return history[history.length - 1]; }
+
+  // ---------- 移動 ----------
+  function doMove(dir, fromReplay) {
+    if (!fromReplay && replayTimer) return false;
+    if (solved) return false;
+    const S = B.move(L, state(), dir);
+    if (!S) { if (!fromReplay) bump(); return false; }
+    history.push(S);
+    moves += B.LETTERS[dir];
+    if (B.isSolved(L, S)) onSolved();
+    render();
+    return true;
+  }
+
+  function bump() {
+    const svg = $('board');
+    svg.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-4px)' }, { transform: 'translateX(4px)' }, { transform: 'translateX(0)' }], { duration: 160 });
+  }
+
+  function applyMoves(str, animate) {
+    for (const c of str) {
+      const d = B.LETTERS.indexOf(c);
+      if (d < 0) continue;
+      if (!doMove(d, true)) break;
+    }
+  }
+
+  function undo() {
+    if (replayTimer || history.length <= 1) return;
+    history.pop(); moves = moves.slice(0, -1); solved = false; render();
+  }
+
+  function restart() { stopReplay(); history = [history[0]]; moves = ''; solved = false; render(); }
+
+  function onSolved() {
+    solved = true;
+    const best = store.get(K_BEST, {});
+    const n = moves.length;
+    if (!best[cur.code] || n < best[cur.code]) { best[cur.code] = n; store.set(K_BEST, best); }
+  }
+
+  function clickCell(x, y) {
+    const S = state();
+    const dx = x - S.px, dy = y - S.py;
+    if (Math.abs(dx) + Math.abs(dy) !== 1) return;
+    doMove(B.DIRS.findIndex(d => d[0] === dx && d[1] === dy));
+  }
+
+  // ---------- 畫面 ----------
+  function render() {
+    board.update(state());
+    $('stepCount').textContent = moves.length;
+    const best = store.get(K_BEST, {})[cur.code];
+    $('bestCount').textContent = best ?? '–';
+    $('board').classList.toggle('solved', solved);
+    const st = $('status');
+    if (solved) {
+      const par = parCache[cur.code];
+      st.textContent = `🎉 過關！共 ${moves.length} 步` + (par && moves.length === par ? '（最短解！）' : '');
+      st.className = 'status win';
+    } else if (replayTimer) { st.textContent = '▶ 播放中…'; st.className = 'status'; }
+    else { st.textContent = cur.name.replace(/^[^ ]+ /, ''); st.className = 'status'; }
+    renderLog();
+    $('undoBtn').disabled = history.length <= 1 || !!replayTimer;
+  }
+
+  function renderLog(highlight) {
+    const log = $('moveLog');
+    if (!moves.length) { log.innerHTML = '<span class="muted">尚未移動</span>'; return; }
+    let html = '';
+    for (let i = 0; i < moves.length; i += 10) {
+      const chunk = [...moves.slice(i, i + 10)].map((c, j) => {
+        const a = B.ARROWS[B.LETTERS.indexOf(c)];
+        return (i + j === highlight) ? `<span class="cur">${a}</span>` : a;
+      }).join('');
+      html += `<span class="grp"><span class="num">${i + 1}</span>${chunk}</span>`;
+    }
+    log.innerHTML = html;
+    log.scrollTop = log.scrollHeight;
+  }
+
+  // ---------- 提示 / 播放 ----------
+  function hint() {
+    if (solved || replayTimer) return;
+    const r = B.solve(L, state());
+    if (!r.path) { toast(r.aborted ? '狀態太多，無法計算' : '目前局面無解，請復原或重新開始'); return; }
+    toast(`提示：${B.ARROWS[r.path[0]]}（還需 ${r.path.length} 步）`);
+    doMove(r.path[0]);
+  }
+
+  function playMoves(str, label) {
+    stopReplay();
+    history = [history[0]]; moves = ''; solved = false;
+    let i = 0;
+    replayTimer = setInterval(() => {
+      if (i >= str.length || solved) { stopReplay(); toast(label + ' 播放完畢'); return; }
+      doMove(B.LETTERS.indexOf(str[i++]), true);
+    }, 220);
+    $('solutionBtn').textContent = '■ 停止播放';
+    render();
+  }
+
+  function stopReplay() {
+    if (!replayTimer) return;
+    clearInterval(replayTimer); replayTimer = null;
+    $('solutionBtn').textContent = '▶ 播放最短解';
+    if (board) render();
+  }
+
+  // ---------- 存檔 ----------
+  function records() { return store.get(K_RECORDS, []); }
+
+  function saveRecord() {
+    if (!moves.length) { toast('還沒有任何移動可存檔'); return; }
+    const list = records();
+    const name = $('saveName').value.trim() || `${cur.name.replace(/^[^ ]+ /, '')} - ${moves.length} 步`;
+    list.unshift({
+      id: Date.now().toString(36), name, levelName: cur.name.replace(/^[^ ]+ /, ''), levelCode: cur.code,
+      moves, steps: moves.length, solved, savedAt: new Date().toISOString(),
+    });
+    store.set(K_RECORDS, list);
+    $('saveName').value = '';
+    renderRecords();
+    toast('已存檔');
+  }
+
+  function renderRecords() {
+    const list = records(), box = $('recordList');
+    if (!list.length) { box.innerHTML = '<div class="empty">尚無存檔。存檔會保存在這個瀏覽器中，可匯出成 JSON 備份。</div>'; return; }
+    box.innerHTML = '';
+    list.forEach(r => {
+      const d = document.createElement('div'); d.className = 'item';
+      const when = new Date(r.savedAt).toLocaleString();
+      d.innerHTML = `<div class="t"></div>
+        <div class="muted"><span class="lv"></span> · ${r.steps} 步 ${r.solved ? '<span class="badge ok">已過關</span>' : '<span class="badge">進行中</span>'}<br>${when}</div>
+        <div class="muted mv" style="font-family:ui-monospace,Consolas,monospace;word-break:break-all"></div>
+        <div class="row">
+          <button class="small" data-act="load">載入繼續</button>
+          <button class="small" data-act="replay">▶ 重播</button>
+          <button class="small" data-act="txt">⤓ .txt</button>
+          <button class="small danger" data-act="del">刪除</button>
+        </div>`;
+      d.querySelector('.t').textContent = r.name;
+      d.querySelector('.lv').textContent = r.levelName;
+      const arrows = B.movesToArrows(r.moves);
+      d.querySelector('.mv').textContent = arrows.length > 60 ? arrows.slice(0, 60) + '…' : arrows;
+      d.addEventListener('click', e => {
+        const act = e.target.dataset && e.target.dataset.act;
+        if (act) recordAction(act, r);
+      });
+      box.appendChild(d);
+    });
+  }
+
+  function ensureLevel(r) {
+    let idx = levelIndexByCode(r.levelCode);
+    if (idx < 0) {
+      levels.push({ id: 't:' + r.levelCode, name: `📁 ${r.levelName}`, code: r.levelCode, custom: true });
+      buildSelOnly();
+      idx = levels.length - 1;
+    }
+    return idx;
+  }
+  function buildSelOnly() {
+    const sel = $('levelSel'); const o = document.createElement('option');
+    o.value = levels.length - 1; o.textContent = levels[levels.length - 1].name; sel.appendChild(o);
+  }
+
+  function recordAction(act, r) {
+    if (act === 'load') { loadLevel(ensureLevel(r), r.moves); toast('已載入：' + r.name); }
+    else if (act === 'replay') { loadLevel(ensureLevel(r)); playMoves(r.moves, r.name); }
+    else if (act === 'txt') downloadText(r);
+    else if (act === 'del') {
+      if (!confirm(`刪除存檔「${r.name}」？`)) return;
+      store.set(K_RECORDS, records().filter(x => x.id !== r.id)); renderRecords();
+    }
+  }
+
+  function download(filename, text, type) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: type || 'text/plain' }));
+    a.download = filename; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  function downloadText(r) {
+    const arrows = B.movesToArrows(r.moves);
+    const lines = [];
+    for (let i = 0; i < arrows.length; i += 10) lines.push(String(i + 1).padStart(4) + ': ' + arrows.slice(i, i + 10));
+    download(`BoxUp-${r.levelName}-${r.steps}步.txt`.replace(/[\\/:*?"<>|]/g, '_'),
+      `Box Up 遊戲紀錄\n名稱：${r.name}\n關卡：${r.levelName}\n關卡代碼：${r.levelCode}\n步數：${r.steps}\n狀態：${r.solved ? '已過關' : '進行中'}\n時間：${new Date(r.savedAt).toLocaleString()}\n\n移動（URDL）：${r.moves}\n\n移動（方向）：\n${lines.join('\n')}\n`);
+  }
+
+  function exportAll() {
+    const data = { app: 'BoxUp', version: 1, exportedAt: new Date().toISOString(), records: records(), customLevels: store.get(K_CUSTOM, []) };
+    download('BoxUp-存檔.json', JSON.stringify(data, null, 2), 'application/json');
+  }
+
+  function importFile(file) {
+    const rd = new FileReader();
+    rd.onload = () => {
+      try {
+        const data = JSON.parse(rd.result);
+        const incoming = Array.isArray(data) ? data : (data.records || []);
+        const list = records(); const ids = new Set(list.map(r => r.id));
+        let n = 0;
+        incoming.forEach(r => { if (r && r.levelCode && typeof r.moves === 'string' && !ids.has(r.id)) { list.push(r); n++; } });
+        store.set(K_RECORDS, list);
+        let m = 0;
+        if (Array.isArray(data.customLevels)) {
+          const cl = store.get(K_CUSTOM, []); const codes = new Set(cl.map(c => c.code));
+          data.customLevels.forEach(c => { if (c && c.code && !codes.has(c.code)) { cl.push(c); m++; } });
+          store.set(K_CUSTOM, cl);
+        }
+        renderRecords();
+        if (m) { const code = cur.code; buildLevelList(); $('levelSel').value = levelIndexByCode(code); }
+        toast(`匯入 ${n} 筆存檔` + (m ? `、${m} 個自訂關卡` : ''));
+      } catch (e) { toast('匯入失敗：檔案格式錯誤'); }
+    };
+    rd.readAsText(file);
+  }
+
+  // ---------- 事件 ----------
+  const KEYMAP = { ArrowUp: 0, ArrowRight: 1, ArrowDown: 2, ArrowLeft: 3, w: 0, d: 1, s: 2, a: 3, W: 0, D: 1, S: 2, A: 3 };
+  document.addEventListener('keydown', e => {
+    if (e.target.matches && e.target.matches('input, textarea, select')) return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key in KEYMAP) { e.preventDefault(); doMove(KEYMAP[e.key]); }
+    else if (e.key === 'z' || e.key === 'Z' || e.key === 'Backspace') { e.preventDefault(); undo(); }
+    else if (e.key === 'r' || e.key === 'R') restart();
+    else if (e.key === 'h' || e.key === 'H') hint();
+  });
+  document.querySelectorAll('.dpad button').forEach(b => b.addEventListener('click', () => doMove(+b.dataset.dir)));
+
+  // 手機滑動
+  let touch = null;
+  $('board').addEventListener('touchstart', e => { const t = e.touches[0]; touch = [t.clientX, t.clientY]; }, { passive: true });
+  $('board').addEventListener('touchend', e => {
+    if (!touch) return;
+    const t = e.changedTouches[0], dx = t.clientX - touch[0], dy = t.clientY - touch[1];
+    touch = null;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+    e.preventDefault();
+    doMove(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : (dy > 0 ? 2 : 0));
+  });
+
+  $('levelSel').addEventListener('change', e => loadLevel(+e.target.value));
+  $('prevBtn').addEventListener('click', () => loadLevel(+$('levelSel').value - 1));
+  $('nextBtn').addEventListener('click', () => loadLevel(+$('levelSel').value + 1));
+  $('undoBtn').addEventListener('click', undo);
+  $('restartBtn').addEventListener('click', restart);
+  $('hintBtn').addEventListener('click', hint);
+  $('solutionBtn').addEventListener('click', () => {
+    if (replayTimer) { stopReplay(); return; }
+    const r = B.solve(L);
+    if (!r.path) { toast('此關無解'); return; }
+    playMoves(r.path.map(d => B.LETTERS[d]).join(''), '最短解');
+  });
+  $('copyMovesBtn').addEventListener('click', () => {
+    const text = B.movesToArrows(moves);
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => toast('已複製移動紀錄'), () => toast('複製失敗'));
+  });
+  $('saveBtn').addEventListener('click', saveRecord);
+  $('saveName').addEventListener('keydown', e => { if (e.key === 'Enter') saveRecord(); });
+  $('exportBtn').addEventListener('click', exportAll);
+  $('importBtn').addEventListener('click', () => $('importFile').click());
+  $('importFile').addEventListener('change', e => { if (e.target.files[0]) importFile(e.target.files[0]); e.target.value = ''; });
+
+  // ---------- 啟動 ----------
+  buildLevelList();
+  const params = new URLSearchParams(location.search);
+  let start = 0;
+  if (params.get('code')) start = levelIndexByCode(params.get('code'));
+  else { const last = store.get(K_LAST, null); const i = last ? levelIndexByCode(last) : -1; if (i >= 0) start = i; }
+  loadLevel(start < 0 ? 0 : start);
+  renderRecords();
+})();
+</script>
+</body>
+</html>
