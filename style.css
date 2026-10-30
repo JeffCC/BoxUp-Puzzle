@@ -26,6 +26,7 @@
   }
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 body {
   background: var(--bg); color: var(--ink);
@@ -39,6 +40,7 @@ header.top {
 header.top h1 { font-size: 20px; margin: 0; letter-spacing: .5px; }
 header.top h1 small { font-weight: 400; color: var(--muted); font-size: 13px; margin-left: 6px; }
 header.top nav { margin-left: auto; display: flex; gap: 8px; }
+header.top .lang-btn { min-width: 36px; }
 main.layout {
   display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px;
   padding: 16px; max-width: 1200px; margin: 0 auto;

@@ -7,6 +7,7 @@
  *     M  玩家（小黑點）
  *     n e s w  紅箱（小寫，字母代表「開口」朝北/東/南/西）
  *     N E S W  藍箱（大寫）
+ *     [..]  同一格放多樣東西（例：[MN] 玩家在藍箱內、[nS] 紅箱在藍箱內）
  */
 (function (global) {
   'use strict';
@@ -33,9 +34,11 @@
     const [w, h, rx, ry, bx, by] = head;
     if (w < 2 || h < 2) throw new Error('寬與高至少為 2');
     const body = code.slice(6);
+    // 每列切成格子，每格是一個字元陣列（[..] 為堆疊格）
+    const tokenize = s => (s.match(/\[[^\]]*\]|./g) || []).map(t => t[0] === '[' ? [...t.slice(1, -1)] : [t]);
     let rows;
-    if (/[;,]/.test(body)) rows = body.split(/[;,]/);
-    else { rows = []; for (let i = 0; i < h; i++) rows.push(body.slice(i * w, i * w + w)); }
+    if (/[;,]/.test(body)) rows = body.split(/[;,]/).map(tokenize);
+    else { const all = tokenize(body); rows = []; for (let i = 0; i < h; i++) rows.push(all.slice(i * w, i * w + w)); }
 
     const walls = Array.from({ length: h }, () => Array(w).fill(false));
     const boxes = [];
@@ -43,10 +46,19 @@
     for (let y = 0; y < h; y++) {
       const row = rows[y] || '';
       for (let x = 0; x < w; x++) {
-        const c = row[x] || '-';
-        if (c === 'X') walls[y][x] = true;
-        else if (c === 'M') { if (player) throw new Error('只能有一個玩家 M'); player = { x, y }; }
-        else if (BOX_CHARS[c]) boxes.push({ kind: BOX_CHARS[c][0], dir: BOX_CHARS[c][1], x, y });
+        const cell = row[x] || ['-'];
+        let kinds = 0;
+        for (const c of cell) {
+          if (c === 'X') walls[y][x] = true;
+          else if (c === 'M') { if (player) throw new Error('只能有一個玩家 M'); player = { x, y }; }
+          else if (BOX_CHARS[c]) {
+            const k = BOX_CHARS[c][0];
+            if (kinds & k) throw new Error(`(${x},${y}) 同一格不能有兩個同尺寸的箱子`);
+            kinds |= k;
+            boxes.push({ kind: k, dir: BOX_CHARS[c][1], x, y });
+          }
+        }
+        if (walls[y][x] && cell.length > 1) throw new Error(`(${x},${y}) 牆上不能放東西`);
       }
     }
     if (!player) throw new Error('缺少玩家 M');
@@ -62,19 +74,20 @@
     return b.kind === BLUE ? c.toUpperCase() : c;
   }
 
-  // 將「編輯中的格子」轉成關卡字串。grid[y][x] = '-', 'X', 'M', 'n'.. 'W'
+  // 將「編輯中的格子」轉成關卡字串。grid[y][x] = '-', 'X', 或由 'M'、紅箱字元、藍箱字元組成的字串（例 'MnS'）
   function serializeGrid(grid, red, blue) {
     const h = grid.length, w = grid[0].length;
     const d = v => v.toString(16);
     return d(w) + d(h) + d(red.x) + d(red.y) + d(blue.x) + d(blue.y) +
-      grid.map(r => r.join('')).join(';');
+      grid.map(r => r.map(c => c.length > 1 ? '[' + c + ']' : c).join('')).join(';');
   }
 
   function levelToGrid(L) {
-    const grid = Array.from({ length: L.h }, (_, y) => Array.from({ length: L.w }, (_, x) => L.walls[y][x] ? 'X' : '-'));
-    grid[L.player.y][L.player.x] = 'M';
-    L.boxes.forEach(b => { grid[b.y][b.x] = boxChar(b); });
-    return grid;
+    const grid = Array.from({ length: L.h }, (_, y) => Array.from({ length: L.w }, (_, x) => L.walls[y][x] ? 'X' : ''));
+    grid[L.player.y][L.player.x] += 'M';
+    L.boxes.filter(b => b.kind === RED).forEach(b => { grid[b.y][b.x] += boxChar(b); });
+    L.boxes.filter(b => b.kind === BLUE).forEach(b => { grid[b.y][b.x] += boxChar(b); });
+    return grid.map(r => r.map(c => c || '-'));
   }
 
   function initialState(L) {

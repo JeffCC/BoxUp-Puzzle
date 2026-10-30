@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Box Up 關卡編輯器</title>
+<meta data-i18n-doctitle="page_title_editor">
 <link rel="stylesheet" href="style.css">
 <style>
   .palette { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
@@ -16,104 +17,132 @@
   .msg.err { color: var(--danger); }
   .msg.ok { color: var(--ok); }
   input[type=number] { width: 70px; }
+  .playbar { width: 100%; max-width: 640px; display: flex; flex-direction: column; gap: 8px; }
+  .playbar .row { justify-content: center; }
+  .playbar .movelog { max-height: 140px; min-height: 0; }
+  .playbar .movelog .st { cursor: pointer; border-radius: 3px; }
+  .playbar .movelog .st:hover { background: var(--line); }
+  .playbar .movelog .st.done { color: var(--muted); }
+  .playbar .movelog .st.cur { background: var(--accent); color: var(--accent-ink); }
+  .play-step { font-weight: 600; min-width: 90px; text-align: center; }
 </style>
 </head>
 <body>
 <header class="top">
-  <h1>Box Up <small>關卡編輯器</small></h1>
-  <nav><a class="btn" href="index.html">▶ 回到遊戲</a></nav>
+  <h1>Box Up <small data-i18n-text="brand_sub_editor">關卡編輯器</small></h1>
+  <nav><a class="btn" href="index.html" data-i18n-text="nav_game">▶ 回到遊戲</a></nav>
 </header>
 
 <main class="layout">
   <section class="stack">
     <div class="card board-wrap">
       <div class="row" style="justify-content:center">
-        <label>寬 <input type="number" id="wIn" min="2" max="15" value="5"></label>
-        <label>高 <input type="number" id="hIn" min="2" max="15" value="5"></label>
-        <button id="resizeBtn">調整大小</button>
-        <button id="clearBtn" class="danger">清空</button>
+        <label><span data-i18n-text="lbl_width">寬</span> <input type="number" id="wIn" min="2" max="15" value="5"></label>
+        <label><span data-i18n-text="lbl_height">高</span> <input type="number" id="hIn" min="2" max="15" value="5"></label>
+        <button id="resizeBtn" data-i18n-text="btn_resize">調整大小</button>
+        <button id="clearBtn" class="danger" data-i18n-text="btn_clear">清空</button>
       </div>
       <svg class="board" id="board"></svg>
+      <svg class="board" id="playBoard" hidden></svg>
+      <div class="playbar" id="playBar" hidden>
+        <div class="row">
+          <button id="pbFirst" data-i18n-title="pb_first_title">⏮</button>
+          <button id="pbPrev" data-i18n-title="pb_prev_title">◀</button>
+          <button id="pbPlay" class="primary" data-i18n-title="pb_play_title" data-i18n-text="pb_play">▶ 播放</button>
+          <button id="pbNext" data-i18n-title="pb_next_title">▶|</button>
+          <button id="pbLast" data-i18n-title="pb_last_title">⏭</button>
+          <span class="play-step" id="pbStep">0 / 0</span>
+          <select id="pbSpeed" data-i18n-title="pb_speed_title">
+            <option value="700" data-i18n-text="pb_speed_slow">慢</option>
+            <option value="350" selected data-i18n-text="pb_speed_mid">中</option>
+            <option value="150" data-i18n-text="pb_speed_fast">快</option>
+          </select>
+          <button id="pbExit" class="danger" data-i18n-title="pb_exit_title" data-i18n-text="pb_exit">✕ 結束示範</button>
+        </div>
+        <div class="movelog" id="pbLog"></div>
+      </div>
       <div class="msg" id="msg"></div>
-      <p class="muted" style="margin:0;text-align:center">左鍵：放置目前工具（可拖曳連續畫）· 右鍵：旋轉箱子開口 · 有星號 ★ 的紅箱／藍箱就是目標箱</p>
+      <p class="muted" style="margin:0;text-align:center" data-i18n="editor_tip"></p>
     </div>
 
     <div class="card">
-      <h2>關卡代碼</h2>
+      <h2 data-i18n-text="code_h2">關卡代碼</h2>
       <textarea id="codeBox" rows="2" spellcheck="false"></textarea>
       <div class="row" style="margin-top:8px">
-        <button id="loadCodeBtn">由代碼載入</button>
-        <button id="copyCodeBtn">複製代碼</button>
-        <span class="muted">格式與原版相容，例：330121---;nMW;---</span>
+        <button id="loadCodeBtn" data-i18n-text="btn_load_code">由代碼載入</button>
+        <button id="copyCodeBtn" data-i18n-text="btn_copy_code">複製代碼</button>
+        <span class="muted" data-i18n-text="code_hint">格式與原版相容,例:330121---;nMW;---</span>
       </div>
     </div>
   </section>
 
   <aside class="stack">
     <div class="card">
-      <h2>工具</h2>
+      <h2 data-i18n-text="tools_h2">工具</h2>
       <div class="palette" id="palette"></div>
     </div>
 
     <div class="card">
-      <h2>檢查與存檔</h2>
-      <input type="text" id="nameIn" placeholder="關卡名稱">
+      <h2 data-i18n-text="verify_h2">檢查與存檔</h2>
+      <input type="text" id="nameIn" data-i18n-placeholder="name_placeholder">
       <div class="row" style="margin-top:8px">
-        <button id="solveBtn">🔍 驗證可解</button>
-        <button id="playBtn">🧪 試玩</button>
-        <button id="saveBtn" class="primary">💾 存為自訂關卡</button>
+        <button id="solveBtn" data-i18n-text="btn_verify">🔍 驗證可解</button>
+        <button id="demoBtn" data-i18n-text="btn_demo">▶ 播放解法</button>
+        <button id="playBtn" data-i18n-text="btn_playtest">🧪 試玩</button>
+        <button id="saveBtn" class="primary" data-i18n-text="btn_save_custom">💾 存為自訂關卡</button>
       </div>
       <div class="msg" id="solveMsg" style="margin-top:8px"></div>
     </div>
 
     <div class="card">
-      <h2>我的自訂關卡</h2>
+      <h2 data-i18n-text="customs_h2">我的自訂關卡</h2>
       <div class="list" id="customList"></div>
       <div class="row" style="margin-top:10px">
-        <button class="small" id="exportBtn">⤓ 匯出 (JSON)</button>
-        <button class="small" id="importBtn">⤒ 匯入</button>
+        <button class="small" id="exportBtn" data-i18n-text="btn_export_customs">⤓ 匯出 (JSON)</button>
+        <button class="small" id="importBtn" data-i18n-text="btn_import">⤒ 匯入</button>
         <input type="file" id="importFile" accept=".json,application/json" hidden>
       </div>
     </div>
 
     <div class="card">
-      <h2>以內建關卡為範本</h2>
+      <h2 data-i18n-text="tpl_h2">以內建關卡為範本</h2>
       <div class="row">
         <select id="tplSel" style="flex:1"></select>
-        <button id="tplBtn">載入</button>
+        <button id="tplBtn" data-i18n-text="btn_tpl_load">載入</button>
       </div>
     </div>
   </aside>
 </main>
 <div class="toast" id="toast"></div>
 
+<script src="i18n.js"></script>
 <script src="boxup-core.js"></script>
 <script src="levels.js"></script>
 <script>
 (function () {
   'use strict';
   const B = BoxUp;
+  const T = (k, v) => window.I18N.t(k, v);
   const $ = id => document.getElementById(id);
   const K_CUSTOM = 'boxup.customLevels';
   const store = {
     get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
-    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { toast('無法寫入瀏覽器儲存空間'); } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { toast(T('toast_storage_fail')); } },
   };
   function toast(msg) {
     const t = $('toast'); t.textContent = msg; t.classList.add('show');
     clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 1800);
   }
 
-  // grid[y][x]: '-', 'X', 'M', 'n','e','s','w','N','E','S','W'
   let grid = [];
-  let red = null, blue = null;   // 目標箱座標 {x,y}
+  let red = null, blue = null;
   let tool = 'X';
-  let editingIndex = -1;         // 正在編輯的自訂關卡索引
+  let editingIndex = -1;
 
   const TOOLS = [
-    { id: 'X', label: '牆' }, { id: '-', label: '橡皮擦' }, { id: 'M', label: '玩家' }, { id: '*', label: '設為目標' },
-    { id: 'n', label: '紅·開上' }, { id: 'e', label: '紅·開右' }, { id: 's', label: '紅·開下' }, { id: 'w', label: '紅·開左' },
-    { id: 'N', label: '藍·開上' }, { id: 'E', label: '藍·開右' }, { id: 'S', label: '藍·開下' }, { id: 'W', label: '藍·開左' },
+    { id: 'X', key: 'tool_wall' }, { id: '-', key: 'tool_eraser' }, { id: 'M', key: 'tool_player' }, { id: '*', key: 'tool_target' },
+    { id: 'n', key: 'tool_red_up' }, { id: 'e', key: 'tool_red_right' }, { id: 's', key: 'tool_red_down' }, { id: 'w', key: 'tool_red_left' },
+    { id: 'N', key: 'tool_blue_up' }, { id: 'E', key: 'tool_blue_right' }, { id: 'S', key: 'tool_blue_down' }, { id: 'W', key: 'tool_blue_left' },
   ];
 
   function iconFor(id) {
@@ -135,11 +164,13 @@
 
   function buildPalette() {
     const p = $('palette');
+    p.innerHTML = '';
     TOOLS.forEach(t => {
+      const label = T(t.key);
       const b = document.createElement('button');
-      b.dataset.tool = t.id; b.title = t.label;
+      b.dataset.tool = t.id; b.title = label; b.dataset.i18nKey = t.key;
       b.appendChild(iconFor(t.id));
-      b.appendChild(document.createTextNode(t.label));
+      b.appendChild(document.createTextNode(label));
       b.addEventListener('click', () => { tool = t.id; refreshPalette(); });
       p.appendChild(b);
     });
@@ -147,7 +178,6 @@
   }
   function refreshPalette() { document.querySelectorAll('.palette button').forEach(b => b.classList.toggle('on', b.dataset.tool === tool)); }
 
-  // ---------- 格子操作 ----------
   function newGrid(w, h) {
     grid = Array.from({ length: h }, () => Array(w).fill('-'));
     red = blue = null;
@@ -161,10 +191,12 @@
     fixTargets();
   }
 
-  const isRed = c => 'nesw'.includes(c) && c !== '';
-  const isBlue = c => 'NESW'.includes(c) && c !== '';
+  const redOf = c => [...c].find(ch => 'nesw'.includes(ch)) || '';
+  const blueOf = c => [...c].find(ch => 'NESW'.includes(ch)) || '';
+  const isRed = c => !!redOf(c);
+  const isBlue = c => !!blueOf(c);
+  const compose = (m, r, b) => (m + r + b) || '-';
 
-  // 目標箱若已不存在，自動改指第一個同色箱
   function fixTargets() {
     const find = test => { for (let y = 0; y < grid.length; y++) for (let x = 0; x < grid[0].length; x++) if (test(grid[y][x])) return { x, y }; return null; };
     if (!red || !isRed(grid[red.y][red.x])) red = find(isRed);
@@ -172,33 +204,38 @@
   }
 
   function paint(x, y, t) {
-    const c = grid[y][x];
+    const c = grid[y][x] === 'X' ? '' : grid[y][x];
+    const m = c.includes('M') ? 'M' : '';
     if (t === '*') {
+      if (!isRed(c) && !isBlue(c)) { setMsg(T('msg_target_on_box'), true); return; }
       if (isRed(c)) red = { x, y };
-      else if (isBlue(c)) blue = { x, y };
-      else { setMsg('「設為目標」要點在紅箱或藍箱上', true); return; }
+      if (isBlue(c)) blue = { x, y };
     } else if (t === 'M') {
-      for (const row of grid) for (let i = 0; i < row.length; i++) if (row[i] === 'M') row[i] = '-';
-      grid[y][x] = 'M';
-    } else {
+      for (const row of grid) for (let i = 0; i < row.length; i++) if (row[i].includes('M')) row[i] = compose('', redOf(row[i]), blueOf(row[i]));
+      grid[y][x] = compose('M', redOf(c), blueOf(c));
+    } else if (t === 'X' || t === '-') {
       grid[y][x] = t;
-      if (isRed(t) && !red) red = { x, y };
-      if (isBlue(t) && !blue) blue = { x, y };
+    } else if ('nesw'.includes(t)) {
+      grid[y][x] = compose(m, t, blueOf(c));
+      if (!red) red = { x, y };
+    } else {
+      grid[y][x] = compose(m, redOf(c), t);
+      if (!blue) blue = { x, y };
     }
     fixTargets();
     changed();
   }
 
-  function rotate(x, y) {
+  function rotate(x, y, preferBlue) {
     const c = grid[y][x];
-    const k = B.BOX_CHARS[c];
-    if (!k) return;
+    const ch = (preferBlue ? blueOf(c) || redOf(c) : redOf(c) || blueOf(c));
+    if (!ch) return;
+    const k = B.BOX_CHARS[ch];
     const nc = 'nesw'[(k[1] + 1) % 4];
-    grid[y][x] = k[0] === B.BLUE ? nc.toUpperCase() : nc;
+    grid[y][x] = c.replace(ch, k[0] === B.BLUE ? nc.toUpperCase() : nc);
     changed();
   }
 
-  // ---------- 繪製 ----------
   function draw() {
     const svg = $('board');
     const h = grid.length, w = grid[0].length, C = B.CELL;
@@ -209,13 +246,14 @@
       const g = B.svgEl('g', { transform: `translate(${x * C} ${y * C})` }, svg);
       const r = B.svgEl('rect', { x: 0, y: 0, width: C, height: C, class: 'cell' + (c === 'X' ? ' wall' : '') }, g);
       r.dataset.x = x; r.dataset.y = y;
-      if (c === 'M') B.svgEl('rect', { x: 37.5, y: 37.5, width: 25, height: 25, fill: 'var(--player)', 'pointer-events': 'none' }, g);
-      else if (B.BOX_CHARS[c]) {
-        const [k, d] = B.BOX_CHARS[c];
+      for (const ch of [blueOf(c), redOf(c)]) {
+        if (!ch) continue;
+        const [k, d] = B.BOX_CHARS[ch];
         const tgt = (k === B.RED && red && red.x === x && red.y === y) || (k === B.BLUE && blue && blue.x === x && blue.y === y);
         B.boxShape(k, d, tgt, g).setAttribute('pointer-events', 'none');
-        if (tgt) starAt(g, k === B.RED ? 50 : 82, k === B.RED ? 50 : 18, 1);
+        if (tgt) starAt(g, k === B.RED ? 34 : 86, k === B.RED ? 34 : 14, 0.8);
       }
+      if (c.includes('M')) B.svgEl('rect', { x: 37.5, y: 37.5, width: 25, height: 25, fill: 'var(--player)', 'pointer-events': 'none' }, g);
     }
   }
 
@@ -226,24 +264,24 @@
 
   function validate() {
     const code = currentCode();
-    let players = 0; grid.forEach(r => r.forEach(c => { if (c === 'M') players++; }));
-    if (!players) return { err: '請放置玩家（小黑點）' };
-    if (!red) return { err: '請放置至少一個紅箱' };
-    if (!blue) return { err: '請放置至少一個藍箱' };
+    let players = 0; grid.forEach(r => r.forEach(c => { if (c.includes('M')) players++; }));
+    if (!players) return { err: T('msg_need_player') };
+    if (!red) return { err: T('msg_need_red') };
+    if (!blue) return { err: T('msg_need_blue') };
     try { return { code, level: B.parse(code) }; } catch (e) { return { err: e.message }; }
   }
 
   function setMsg(t, err) { const m = $('msg'); m.textContent = t; m.className = 'msg' + (err ? ' err' : ''); }
 
   function changed() {
+    stopDemo();
     draw();
     const v = validate();
     $('codeBox').value = v.code || currentCode() || '';
-    setMsg(v.err ? '⚠ ' + v.err : '關卡格式正確', !!v.err);
+    setMsg(v.err ? T('msg_level_warn', { err: v.err }) : T('msg_level_ok'), !!v.err);
     $('solveMsg').textContent = '';
   }
 
-  // ---------- 滑鼠 ----------
   let dragging = false, lastCell = null;
   const cellFromEvent = e => {
     const t = document.elementFromPoint(e.clientX, e.clientY);
@@ -251,7 +289,7 @@
   };
   $('board').addEventListener('pointerdown', e => {
     const c = cellFromEvent(e); if (!c) return;
-    if (e.button === 2) { rotate(c[0], c[1]); return; }
+    if (e.button === 2) { rotate(c[0], c[1], e.shiftKey); return; }
     if (e.button !== 0) return;
     dragging = ['X', '-'].includes(tool);
     lastCell = c.join();
@@ -265,7 +303,6 @@
   window.addEventListener('pointerup', () => { dragging = false; });
   $('board').addEventListener('contextmenu', e => e.preventDefault());
 
-  // ---------- 載入 ----------
   function loadCode(code, name) {
     const L = B.parse(code);
     grid = B.levelToGrid(L);
@@ -276,24 +313,23 @@
     changed();
   }
 
-  // ---------- 自訂關卡 ----------
   function customs() { return store.get(K_CUSTOM, []); }
 
   function renderCustoms() {
     const list = customs(), box = $('customList');
-    if (!list.length) { box.innerHTML = '<div class="empty">尚無自訂關卡。自訂關卡會出現在遊戲頁的關卡選單「自訂關卡」分類中。</div>'; return; }
+    if (!list.length) { box.innerHTML = `<div class="empty">${T('no_customs')}</div>`; return; }
     box.innerHTML = '';
     list.forEach((c, i) => {
       const d = document.createElement('div'); d.className = 'item';
       d.innerHTML = `<div class="t"></div><div class="muted cd" style="font-family:ui-monospace,Consolas,monospace;word-break:break-all"></div>
-        <div class="row"><button class="small" data-a="edit">編輯</button><button class="small" data-a="play">▶ 玩</button><button class="small danger" data-a="del">刪除</button></div>`;
-      d.querySelector('.t').textContent = c.name + (c.par ? `（最短 ${c.par} 步）` : '') + (i === editingIndex ? ' ✎' : '');
+        <div class="row"><button class="small" data-a="edit">${T('btn_edit')}</button><button class="small" data-a="play">${T('btn_play')}</button><button class="small danger" data-a="del">${T('btn_delete')}</button></div>`;
+      d.querySelector('.t').textContent = c.name + (c.par ? T('custom_par_suffix', { n: c.par }) : '') + (i === editingIndex ? ' ✎' : '');
       d.querySelector('.cd').textContent = c.code;
       d.addEventListener('click', e => {
         const a = e.target.dataset && e.target.dataset.a;
         if (a === 'edit') { editingIndex = i; loadCode(c.code, c.name); renderCustoms(); }
         else if (a === 'play') location.href = 'index.html?code=' + encodeURIComponent(c.code) + '&name=' + encodeURIComponent(c.name);
-        else if (a === 'del' && confirm(`刪除自訂關卡「${c.name}」？`)) {
+        else if (a === 'del' && confirm(T('confirm_delete_custom', { name: c.name }))) {
           const l = customs(); l.splice(i, 1); store.set(K_CUSTOM, l);
           if (editingIndex === i) editingIndex = -1; else if (editingIndex > i) editingIndex--;
           renderCustoms();
@@ -305,15 +341,15 @@
 
   function solveNow() {
     const v = validate(), m = $('solveMsg');
-    if (v.err) { m.textContent = '⚠ ' + v.err; m.className = 'msg err'; return null; }
-    m.textContent = '計算中…'; m.className = 'msg';
+    if (v.err) { m.textContent = T('msg_level_warn', { err: v.err }); m.className = 'msg err'; return null; }
+    m.textContent = T('solve_calculating'); m.className = 'msg';
     return new Promise(res => setTimeout(() => {
       const r = B.solve(v.level);
       if (r.path) {
-        m.textContent = `✔ 可解！最短 ${r.path.length} 步（搜尋 ${r.nodes.toLocaleString()} 個狀態）\n${B.movesToArrows(r.path.map(d => B.LETTERS[d]).join(''))}`;
+        m.textContent = T('solve_ok', { n: r.path.length, nodes: r.nodes.toLocaleString(), arrows: B.movesToArrows(r.path.map(d => B.LETTERS[d]).join('')) });
         m.className = 'msg ok'; m.style.whiteSpace = 'pre-wrap'; m.style.wordBreak = 'break-all';
       } else {
-        m.textContent = r.aborted ? '⚠ 狀態太多，無法在合理時間內判斷是否可解' : '✘ 此關卡無解';
+        m.textContent = r.aborted ? T('solve_too_many') : T('solve_none');
         m.className = 'msg err';
       }
       res({ v, r });
@@ -321,25 +357,127 @@
   }
 
   $('solveBtn').addEventListener('click', solveNow);
+
+  let demo = null;
+  const showEl = (id, on) => $(id).toggleAttribute('hidden', !on);
+
+  async function startDemo() {
+    const res = await solveNow();
+    if (!res || !res.r.path) { if (res) toast(T('demo_unsolvable')); return; }
+    const { v, r } = res;
+    const states = [B.initialState(v.level)];
+    for (const d of r.path) states.push(B.move(v.level, states[states.length - 1], d));
+    showEl('board', false); showEl('playBoard', true); showEl('playBar', true);
+    demo = { L: v.level, path: r.path, states, i: 0, timer: null, board: B.createBoard($('playBoard'), v.level) };
+    $('playBoard').classList.add('no-anim');
+    renderLogDemo();
+    showDemo();
+    requestAnimationFrame(() => requestAnimationFrame(() => { $('playBoard').classList.remove('no-anim'); playDemo(); }));
+  }
+
+  function renderLogDemo() {
+    const log = $('pbLog');
+    log.innerHTML = '';
+    demo.path.forEach((d, k) => {
+      if (k % 10 === 0) {
+        const g = document.createElement('span'); g.className = 'grp';
+        g.innerHTML = `<span class="num">${k + 1}</span>`;
+        log.appendChild(g);
+      }
+      const a = document.createElement('span');
+      a.className = 'st'; a.textContent = B.ARROWS[d]; a.dataset.k = k;
+      a.title = T('demo_step', { k: k + 1, arrow: B.ARROWS[d] });
+      a.addEventListener('click', () => { pauseDemo(); gotoDemo(k + 1); });
+      log.lastChild.appendChild(a);
+    });
+  }
+
+  function showDemo() {
+    const { i, path, states } = demo;
+    demo.board.update(states[i]);
+    $('playBoard').classList.toggle('solved', i === path.length);
+    $('pbStep').textContent = T('step_counter', { i, n: path.length });
+    $('pbFirst').disabled = $('pbPrev').disabled = i === 0;
+    $('pbNext').disabled = $('pbLast').disabled = i === path.length;
+    $('pbLog').querySelectorAll('.st').forEach(el => {
+      const k = +el.dataset.k;
+      el.classList.toggle('done', k < i - 1);
+      el.classList.toggle('cur', k === i - 1);
+    });
+    const cur = $('pbLog').querySelector('.st.cur');
+    if (cur) cur.scrollIntoView({ block: 'nearest' });
+    setMsg(i === path.length ? T('demo_done') : i === 0 ? T('demo_start') : T('demo_step', { k: i, arrow: B.ARROWS[path[i - 1]] }), false);
+  }
+
+  function gotoDemo(i) {
+    if (!demo) return;
+    demo.i = Math.max(0, Math.min(demo.path.length, i));
+    showDemo();
+  }
+
+  function playDemo() {
+    if (!demo) return;
+    if (demo.i === demo.path.length) gotoDemo(0);
+    clearInterval(demo.timer);
+    demo.timer = setInterval(() => {
+      if (demo.i >= demo.path.length) { pauseDemo(); return; }
+      gotoDemo(demo.i + 1);
+    }, +$('pbSpeed').value);
+    $('pbPlay').textContent = T('pb_pause');
+    $('pbPlay').setAttribute('data-i18n-text', 'pb_pause');
+  }
+
+  function pauseDemo() {
+    if (!demo) return;
+    clearInterval(demo.timer); demo.timer = null;
+    $('pbPlay').textContent = T('pb_play');
+    $('pbPlay').setAttribute('data-i18n-text', 'pb_play');
+  }
+
+  function stopDemo() {
+    if (!demo) return;
+    pauseDemo();
+    demo = null;
+    showEl('board', true); showEl('playBoard', false); showEl('playBar', false);
+  }
+
+  $('demoBtn').addEventListener('click', startDemo);
+  $('pbPlay').addEventListener('click', () => demo && (demo.timer ? pauseDemo() : playDemo()));
+  $('pbFirst').addEventListener('click', () => { pauseDemo(); gotoDemo(0); });
+  $('pbPrev').addEventListener('click', () => { pauseDemo(); gotoDemo(demo.i - 1); });
+  $('pbNext').addEventListener('click', () => { pauseDemo(); gotoDemo(demo.i + 1); });
+  $('pbLast').addEventListener('click', () => { pauseDemo(); gotoDemo(demo.path.length); });
+  $('pbSpeed').addEventListener('change', () => { if (demo && demo.timer) playDemo(); });
+  $('pbExit').addEventListener('click', () => { stopDemo(); changed(); });
+  document.addEventListener('keydown', e => {
+    if (!demo || (e.target.matches && e.target.matches('input, textarea, select'))) return;
+    const k = e.key;
+    if (k === ' ') { e.preventDefault(); demo.timer ? pauseDemo() : playDemo(); }
+    else if (k === 'ArrowLeft') { e.preventDefault(); pauseDemo(); gotoDemo(demo.i - 1); }
+    else if (k === 'ArrowRight') { e.preventDefault(); pauseDemo(); gotoDemo(demo.i + 1); }
+    else if (k === 'Home') { pauseDemo(); gotoDemo(0); }
+    else if (k === 'End') { pauseDemo(); gotoDemo(demo.path.length); }
+    else if (k === 'Escape') { stopDemo(); changed(); }
+  });
   $('playBtn').addEventListener('click', () => {
     const v = validate(); if (v.err) { toast(v.err); return; }
-    window.open('index.html?code=' + encodeURIComponent(v.code) + '&name=' + encodeURIComponent($('nameIn').value.trim() || '試玩關卡'), '_blank');
+    window.open('index.html?code=' + encodeURIComponent(v.code) + '&name=' + encodeURIComponent($('nameIn').value.trim() || T('playtest_default_name')), '_blank');
   });
   $('saveBtn').addEventListener('click', async () => {
     const res = await solveNow(); if (!res) return;
     const { v, r } = res;
-    if (!r.path && !confirm('此關卡無解（或無法判斷），仍要存檔嗎？')) return;
-    const name = $('nameIn').value.trim() || `自訂關卡 ${new Date().toLocaleDateString()}`;
+    if (!r.path && !confirm(T('solve_none') + ' — save anyway?')) return;
+    const name = $('nameIn').value.trim() || T('custom_default_name', { date: new Date().toLocaleDateString() });
     const list = customs();
     const entry = { name, code: v.code, par: r.path ? r.path.length : null, savedAt: new Date().toISOString() };
     const dup = list.findIndex((c, i) => c.code === v.code && i !== editingIndex);
-    if (dup >= 0) { toast('已有相同的關卡：' + list[dup].name); return; }
-    if (editingIndex >= 0 && list[editingIndex] && confirm(`覆蓋原本的「${list[editingIndex].name}」？（取消則另存新關卡）`)) list[editingIndex] = entry;
+    if (dup >= 0) { toast(T('toast_dup', { name: list[dup].name })); return; }
+    if (editingIndex >= 0 && list[editingIndex] && confirm(T('confirm_overwrite', { name: list[editingIndex].name }))) list[editingIndex] = entry;
     else { list.push(entry); editingIndex = list.length - 1; }
     store.set(K_CUSTOM, list);
     $('nameIn').value = name;
     renderCustoms();
-    toast('已儲存：' + name);
+    toast(T('toast_custom_saved', { name }));
   });
 
   $('resizeBtn').addEventListener('click', () => {
@@ -347,28 +485,33 @@
     $('wIn').value = w; $('hIn').value = h; resize(w, h); changed();
   });
   $('clearBtn').addEventListener('click', () => {
-    if (!confirm('清空整個棋盤？')) return;
+    if (!confirm(T('confirm_clear_board'))) return;
     newGrid(grid[0].length, grid.length); editingIndex = -1; renderCustoms(); changed();
   });
   $('loadCodeBtn').addEventListener('click', () => {
-    try { loadCode($('codeBox').value); editingIndex = -1; renderCustoms(); toast('已載入'); }
-    catch (e) { setMsg('⚠ 代碼錯誤：' + e.message, true); }
+    try { loadCode($('codeBox').value); editingIndex = -1; renderCustoms(); toast(T('toast_code_loaded')); }
+    catch (e) { setMsg(T('toast_code_bad', { msg: e.message }), true); }
   });
   $('copyCodeBtn').addEventListener('click', () => {
-    navigator.clipboard.writeText($('codeBox').value).then(() => toast('已複製'), () => toast('複製失敗'));
+    navigator.clipboard.writeText($('codeBox').value).then(() => toast(T('toast_copied_short')), () => toast(T('toast_copy_failed')));
   });
 
+  function buildTplSel() {
+    const tpl = $('tplSel');
+    tpl.innerHTML = '';
+    BOXUP_LEVELS.forEach((l, i) => { const o = document.createElement('option'); o.value = i; o.textContent = `${i + 1}. ${l.author} ${l.name}`; tpl.appendChild(o); });
+  }
   const tpl = $('tplSel');
-  BOXUP_LEVELS.forEach((l, i) => { const o = document.createElement('option'); o.value = i; o.textContent = `${i + 1}. ${l.name}`; tpl.appendChild(o); });
+  buildTplSel();
   $('tplBtn').addEventListener('click', () => {
     const l = BOXUP_LEVELS[+tpl.value]; editingIndex = -1;
-    loadCode(l.code, l.name + '（改）'); renderCustoms();
+    loadCode(l.code, `${l.author} ${l.name}${T('tpl_edited_suffix')}`); renderCustoms();
   });
 
   $('exportBtn').addEventListener('click', () => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([JSON.stringify({ app: 'BoxUp', version: 1, customLevels: customs() }, null, 2)], { type: 'application/json' }));
-    a.download = 'BoxUp-自訂關卡.json'; a.click();
+    a.download = T('file_save_customs'); a.click();
   });
   $('importBtn').addEventListener('click', () => $('importFile').click());
   $('importFile').addEventListener('change', e => {
@@ -380,14 +523,19 @@
         const inc = Array.isArray(data) ? data : (data.customLevels || []);
         const list = customs(), codes = new Set(list.map(c => c.code));
         let n = 0;
-        inc.forEach(c => { if (c && c.code && !codes.has(c.code)) { try { B.parse(c.code); list.push({ name: c.name || '匯入關卡', code: c.code, par: c.par ?? null }); n++; } catch (_) {} } });
-        store.set(K_CUSTOM, list); renderCustoms(); toast(`匯入 ${n} 個關卡`);
-      } catch (err) { toast('匯入失敗：檔案格式錯誤'); }
+        inc.forEach(c => { if (c && c.code && !codes.has(c.code)) { try { B.parse(c.code); list.push({ name: c.name || T('import_custom_default_name'), code: c.code, par: c.par ?? null }); n++; } catch (_) {} } });
+        store.set(K_CUSTOM, list); renderCustoms(); toast(T('toast_imported_customs', { n }));
+      } catch (err) { toast(T('toast_import_failed')); }
     };
     rd.readAsText(f);
   });
 
-  // ---------- 啟動 ----------
+  window.onI18nChange = function () {
+    buildPalette();
+    renderCustoms();
+    changed();
+  };
+
   buildPalette();
   newGrid(5, 5);
   changed();
